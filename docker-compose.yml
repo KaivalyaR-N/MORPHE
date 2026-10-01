@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: morphe-postgres
+    environment:
+      POSTGRES_USER: morphe_user
+      POSTGRES_PASSWORD: morphe_password
+      POSTGRES_DB: morphe_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U morphe_user -d morphe_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: morphe-redis
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: morphe-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://morphe_user:morphe_password@postgres:5432/morphe_db
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=morphe-super-secret-key-change-in-production-2026
+      - AI_PROVIDER=auto
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./storage:/app/storage
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: morphe-web
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
