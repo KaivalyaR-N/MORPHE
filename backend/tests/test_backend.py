@@ -1,22 +1,19 @@
 import pytest
+import pytest_asyncio
 import os
 import asyncio
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 from app.core.database import engine, Base
 
-@pytest.fixture(scope="module")
-def event_loop():
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
 
-@pytest.fixture(scope="module", autouse=True)
+@pytest_asyncio.fixture(scope="module", autouse=True)
 async def setup_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     yield
+
 
 @pytest.mark.asyncio
 async def test_auth_and_full_flow():
@@ -50,7 +47,7 @@ async def test_auth_and_full_flow():
         assert proj_res.status_code == 200
         project_id = proj_res.json()["data"]["id"]
 
-        # 4. Upload Document (sample txt file simulating research paper)
+        # 4. Upload Document
         sample_paper = """Title: Efficient Neural Architecture Search via Reinforcement Learning
 
 Abstract: Neural architecture search (NAS) has automated the design of deep neural networks. In this paper, we present an efficient NAS methodology utilizing reinforcement learning and ablation benchmarks. Our algorithm reduces search time by 40%.

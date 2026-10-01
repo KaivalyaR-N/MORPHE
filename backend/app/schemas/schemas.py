@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -31,15 +31,14 @@ class TokenResponse(BaseModel):
 
 
 class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     email: str
     full_name: str
     role: str
     is_active: bool
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # Project Schemas
@@ -54,6 +53,8 @@ class ProjectUpdate(BaseModel):
 
 
 class ProjectResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     description: Optional[str]
@@ -62,12 +63,11 @@ class ProjectResponse(BaseModel):
     updated_at: datetime
     document_count: Optional[int] = 0
 
-    class Config:
-        from_attributes = True
-
 
 # Document Schemas
 class DocumentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     project_id: str
     title: str
@@ -79,20 +79,16 @@ class DocumentResponse(BaseModel):
     updated_at: datetime
     latest_version_number: Optional[int] = 1
 
-    class Config:
-        from_attributes = True
-
 
 class DocumentVersionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     document_id: str
     version_number: int
     commit_message: Optional[str]
     created_at: datetime
     cdm_data: Dict[str, Any]
-
-    class Config:
-        from_attributes = True
 
 
 # Canonical Document Model (CDM) Schemas
@@ -163,6 +159,8 @@ class CDMDocument(BaseModel):
 
 # NLP Analysis Schema
 class NLPAnalysisResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     document_version_id: str
     keywords: List[Dict[str, Any]]
@@ -172,12 +170,11 @@ class NLPAnalysisResponse(BaseModel):
     summary: Optional[str]
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 # Domain Analysis Schema
 class DomainAnalysisResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     document_version_id: str
     primary_domain: str
@@ -188,9 +185,6 @@ class DomainAnalysisResponse(BaseModel):
     confidence: float
     evidence: List[Dict[str, Any]]
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # Validation Engine Schema
@@ -203,6 +197,8 @@ class ValidationIssue(BaseModel):
 
 
 class ValidationResultResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     document_version_id: str
     structural_issues: List[ValidationIssue]
@@ -213,12 +209,11 @@ class ValidationResultResponse(BaseModel):
     overall_score: float
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 # Knowledge Base Schemas
 class JournalResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     publisher_id: str
     name: str
@@ -228,30 +223,25 @@ class JournalResponse(BaseModel):
     max_words: Optional[int]
     abstract_max_words: Optional[int]
 
-    class Config:
-        from_attributes = True
-
 
 class PublisherResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     code: str
     description: Optional[str]
     journals: List[JournalResponse] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
-
 
 class CitationStyleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     code: str
     description: Optional[str]
     formatting_rules: Dict[str, Any]
-
-    class Config:
-        from_attributes = True
 
 
 # Exporter Schemas
@@ -261,6 +251,8 @@ class GenerateExportRequest(BaseModel):
 
 
 class ExportArtifactResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     project_id: str
     document_version_id: str
@@ -270,9 +262,6 @@ class ExportArtifactResponse(BaseModel):
     file_size: int
     status: str
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # AI Assistant Schemas
