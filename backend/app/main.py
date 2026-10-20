@@ -3,9 +3,10 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.core.database import engine, Base
+from app.core.database import engine, Base, AsyncSessionLocal
 from app.api.v1.router import api_v1_router
 from app.models.models import *  # Ensure all ORM models are registered
+from app.modules.knowledge.knowledge_service import KnowledgeService
 
 
 @asynccontextmanager
@@ -13,6 +14,11 @@ async def lifespan(app: FastAPI):
     # Startup: Create tables if they do not exist
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Auto-seed default academic publishers & citation styles
+    async with AsyncSessionLocal() as session:
+        await KnowledgeService.seed_knowledge_base(session)
+
     yield
     # Shutdown
     await engine.dispose()

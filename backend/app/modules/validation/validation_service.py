@@ -1,3 +1,4 @@
+import re
 from typing import Dict, Any, List
 
 
@@ -116,6 +117,40 @@ class ValidationService:
                 "location": "References",
                 "suggestion": "Ensure the document includes a formatted References section."
             })
+        else:
+            all_text = " ".join([s.get("content", "") for s in sections])
+            in_text_numbers = set(re.findall(r"\[(\d+)\]", all_text))
+            
+            ref_keys = set()
+            for idx, r in enumerate(references, 1):
+                raw_k = str(r.get("key", "")).strip("[]")
+                if raw_k.isdigit():
+                    ref_keys.add(raw_k)
+                else:
+                    ref_keys.add(str(idx))
+
+            # Missing citations (cited in text but absent in references)
+            if in_text_numbers and ref_keys:
+                missing_refs = in_text_numbers - ref_keys
+                for m in sorted(list(missing_refs))[:5]:
+                    citation_issues.append({
+                        "severity": "warning",
+                        "category": "citation",
+                        "message": f"In-text citation [{m}] has no matching bibliography entry.",
+                        "location": f"Citation [{m}]",
+                        "suggestion": f"Add a corresponding bibliography entry for citation [{m}]."
+                    })
+
+                # Orphan references (in bibliography but never referenced)
+                orphan_refs = ref_keys - in_text_numbers
+                for o in sorted(list(orphan_refs))[:5]:
+                    citation_issues.append({
+                        "severity": "info",
+                        "category": "citation",
+                        "message": f"Bibliography item [{o}] is never referenced in the document text.",
+                        "location": f"Reference [{o}]",
+                        "suggestion": f"Add citation [{o}] in text or remove if unused."
+                    })
 
         # 5. Publisher Compliance Evaluation
         compliance_check = cls._evaluate_publisher_compliance(cdm_data, target_publisher_code)
@@ -128,7 +163,7 @@ class ValidationService:
             sum(5 for i in metadata_issues if i["severity"] == "warning") +
             sum(12 for i in content_issues if i["severity"] == "error") +
             sum(5 for i in content_issues if i["severity"] == "warning") +
-            sum(5 for i in citation_issues)
+            sum(5 for i in citation_issues if i["severity"] == "warning")
         )
         overall_score = max(20.0, float(100 - deductions))
 
@@ -156,7 +191,6 @@ class ValidationService:
         abstract_len = len(metadata.get("abstract", "").split())
         
         abstract_ok = abstract_len <= rules["max_abstract"]
-        citation_ok = True
         
         checklist = [
             {"criterion": "Abstract Word Limit", "status": "PASS" if abstract_ok else "FAIL", "detail": f"{abstract_len} / {rules['max_abstract']} max words"},

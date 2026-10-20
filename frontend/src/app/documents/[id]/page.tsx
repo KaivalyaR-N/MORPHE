@@ -30,7 +30,8 @@ import {
   Image as ImageIcon,
   X,
   MessageSquare,
-  Bot
+  Bot,
+  Wand2
 } from "lucide-react";
 
 export default function DocumentWorkspacePage() {
@@ -247,6 +248,12 @@ export default function DocumentWorkspacePage() {
       metadata: { ...cdm.metadata, abstract: cleaned }
     });
     alert("Applied AI generated text into Document Abstract! Click 'Save CDM Version' to commit.");
+  };
+
+  const handleAutoDraftSection = (secName: string) => {
+    setActiveTab("ai");
+    setAiAction("suggest_structure");
+    setAiPrompt(`Draft a standard research outline and academic paragraphs for missing section: ${secName}`);
   };
 
   const handleGenerateExport = () => {
@@ -857,8 +864,32 @@ export default function DocumentWorkspacePage() {
                     </div>
                     <p className="text-amber-800">Location: {issue.location}</p>
                     <p className="text-amber-700 italic">Suggestion: {issue.suggestion}</p>
+                    <button
+                      onClick={() => handleAutoDraftSection(issue.location)}
+                      className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800"
+                    >
+                      <Wand2 className="h-3 w-3" /> Auto-Draft with AI
+                    </button>
                   </div>
                 ))
+              )}
+
+              {/* Citation cross-referencing consistency issues */}
+              {(validation?.citation_issues || []).length > 0 && (
+                <div className="pt-2 border-t border-slate-100 space-y-2">
+                  <h5 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                    <BookMarked className="h-3.5 w-3.5 text-blue-600" /> Citation & Bibliography Consistency
+                  </h5>
+                  {(validation?.citation_issues || []).map((cIssue: any, idx: number) => (
+                    <div key={idx} className="p-2.5 bg-blue-50/60 border border-blue-200 rounded text-xs space-y-0.5">
+                      <div className="flex items-center justify-between font-semibold text-blue-900">
+                        <span>{cIssue.message}</span>
+                        <span className="uppercase text-[9px] px-1 rounded bg-blue-200 text-blue-800">{cIssue.severity}</span>
+                      </div>
+                      <p className="text-blue-700 text-[11px]">{cIssue.suggestion}</p>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 
