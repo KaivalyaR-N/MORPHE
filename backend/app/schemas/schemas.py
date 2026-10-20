@@ -30,6 +30,12 @@ class TokenResponse(BaseModel):
     user: "UserResponse"
 
 
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    role: Optional[str] = None
+    preferences: Optional[Dict[str, Any]] = None
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -39,6 +45,7 @@ class UserResponse(BaseModel):
     role: str
     is_active: bool
     created_at: datetime
+    preferences: Optional[Dict[str, Any]] = None
 
 
 # Project Schemas

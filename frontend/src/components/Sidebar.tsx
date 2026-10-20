@@ -13,7 +13,8 @@ import {
   FileCheck,
   LogOut,
   Sparkles,
-  ShieldAlert
+  ShieldAlert,
+  Settings
 } from "lucide-react";
 
 const navItems = [
@@ -22,6 +23,7 @@ const navItems = [
   { name: "Knowledge Base", href: "/knowledge-base", icon: BookOpen },
   { name: "Exports History", href: "/exports", icon: Download },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
+  { name: "Settings", href: "/settings", icon: Settings },
 ];
 
 export default function Sidebar() {

@@ -10,7 +10,7 @@ from app.core.security import (
     decode_token
 )
 from app.models.models import User
-from app.schemas.schemas import UserRegister, UserLogin, TokenResponse, UserResponse, APIResponse
+from app.schemas.schemas import UserRegister, UserLogin, TokenResponse, UserResponse, UserUpdate, APIResponse
 from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -80,5 +80,25 @@ async def login(user_in: UserLogin, db: AsyncSession = Depends(get_db)):
 
 @router.get("/me", response_model=APIResponse)
 async def get_me(current_user: User = Depends(get_current_user)):
+    user_resp = UserResponse.model_validate(current_user)
+    return APIResponse(success=True, data=user_resp.model_dump())
+
+
+@router.put("/profile", response_model=APIResponse)
+async def update_profile(
+    user_in: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if user_in.full_name is not None:
+        current_user.full_name = user_in.full_name
+    if user_in.role is not None:
+        current_user.role = user_in.role
+    if user_in.preferences is not None:
+        current_prefs = current_user.preferences or {}
+        current_user.preferences = {**current_prefs, **user_in.preferences}
+
+    await db.commit()
+    await db.refresh(current_user)
     user_resp = UserResponse.model_validate(current_user)
     return APIResponse(success=True, data=user_resp.model_dump())
