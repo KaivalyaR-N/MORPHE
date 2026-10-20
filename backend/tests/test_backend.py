@@ -203,3 +203,8 @@ We formulate pulse synthesis via optimal control.
         assert "citation_issues" in val_data
         assert "structural_issues" in val_data
         assert isinstance(val_data["citation_issues"], list)
+        # 17. Download original uploaded file
+        orig_dl = await ac.get(f"/api/v1/documents/{doc_id}/download-original", headers=headers)
+        assert orig_dl.status_code == 200
+        assert b"Efficient Neural Architecture Search" in orig_dl.content
+
