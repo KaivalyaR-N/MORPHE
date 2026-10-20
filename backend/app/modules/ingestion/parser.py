@@ -63,7 +63,9 @@ class DocumentParser:
             "keywords": keywords,
             "authors": [{"name": "Extracted Author", "affiliation": "", "email": ""}],
             "raw_text": full_text,
-            "sections": sections
+            "sections": sections,
+            "figures": [],
+            "tables": []
         }
 
     @classmethod
@@ -91,13 +93,28 @@ class DocumentParser:
 
         sections = cls._structure_raw_text(full_text)
 
+        # Extract tables
+        tables = []
+        for t_idx, tbl in enumerate(doc.tables, 1):
+            table_data = []
+            for row in tbl.rows:
+                table_data.append([cell.text.strip() for cell in row.cells])
+            if table_data:
+                tables.append({
+                    "id": f"tbl_{t_idx}",
+                    "caption": f"Table {t_idx}",
+                    "data": table_data
+                })
+
         return {
             "title": title,
             "abstract": abstract,
             "keywords": keywords,
             "authors": [{"name": "Extracted Author", "affiliation": "", "email": ""}],
             "raw_text": full_text,
-            "sections": sections
+            "sections": sections,
+            "tables": tables,
+            "figures": []
         }
 
     @classmethod
@@ -108,14 +125,42 @@ class DocumentParser:
         lines = [line.strip() for line in full_text.split("\n") if line.strip()]
         title = lines[0] if lines else "Untitled Document"
 
+        title_match = re.search(r"(?i)^title[:\s]+(.*)$", full_text, re.MULTILINE)
+        if title_match:
+            title = title_match.group(1).strip()
+
+        abstract = ""
+        abstract_match = re.search(r"(?i)abstract[:\s]*(.*?)(?=\n\s*\n|introduction|1\.|keywords)", full_text, re.DOTALL)
+        if abstract_match:
+            abstract = abstract_match.group(1).strip()
+
+        keywords = []
+        kw_match = re.search(r"(?i)keywords[:\s]*(.*?)(?=\n\s*\n|1\.|introduction)", full_text, re.DOTALL)
+        if kw_match:
+            raw_kws = kw_match.group(1).strip()
+            keywords = [k.strip() for k in re.split(r"[,;•]", raw_kws) if k.strip()]
+
+        authors = [{"name": "Lead Researcher", "affiliation": "Academic Institution", "email": ""}]
+        author_match = re.search(r"(?i)authors?[:\s]*(.*?)(?=\n\s*\n|abstract|keywords|1\.|introduction)", full_text, re.DOTALL)
+        if author_match:
+            raw_auths = author_match.group(1).strip()
+            ext_authors = []
+            for a in re.split(r"[,;\n]", raw_auths):
+                if a.strip() and len(a.strip()) > 2:
+                    ext_authors.append({"name": a.strip(), "affiliation": "", "email": ""})
+            if ext_authors:
+                authors = ext_authors
+
         sections = cls._structure_raw_text(full_text)
         return {
             "title": title,
-            "abstract": "",
-            "keywords": [],
-            "authors": [],
+            "abstract": abstract,
+            "keywords": keywords,
+            "authors": authors,
             "raw_text": full_text,
-            "sections": sections
+            "sections": sections,
+            "tables": [],
+            "figures": []
         }
 
     @classmethod
@@ -127,6 +172,17 @@ class DocumentParser:
         title_match = re.search(r"^#\s+(.*)$", full_text, re.MULTILINE)
         if title_match:
             title = title_match.group(1).strip()
+
+        abstract = ""
+        abstract_match = re.search(r"(?i)(?:##\s*abstract|abstract)[:\s]*(.*?)(?=\n#{1,3}\s+|\n\s*\n\s*#{1,3})", full_text, re.DOTALL)
+        if abstract_match:
+            abstract = abstract_match.group(1).strip()
+
+        keywords = []
+        kw_match = re.search(r"(?i)keywords[:\s]*(.*?)(?=\n\s*\n|\n#{1,3}\s+)", full_text, re.DOTALL)
+        if kw_match:
+            raw_kws = kw_match.group(1).strip()
+            keywords = [k.strip() for k in re.split(r"[,;•`]", raw_kws) if k.strip()]
 
         sections = []
         section_splits = re.split(r"\n(?=#{1,3}\s+)", full_text)
@@ -157,11 +213,13 @@ class DocumentParser:
 
         return {
             "title": title,
-            "abstract": "",
-            "keywords": [],
-            "authors": [],
+            "abstract": abstract,
+            "keywords": keywords,
+            "authors": [{"name": "Author", "affiliation": "", "email": ""}],
             "raw_text": full_text,
-            "sections": sections
+            "sections": sections,
+            "tables": [],
+            "figures": []
         }
 
     @classmethod
@@ -175,29 +233,94 @@ class DocumentParser:
         abstract_match = re.search(r"\\begin\{abstract\}(.*?)\\end\{abstract\}", full_text, re.DOTALL)
         abstract = abstract_match.group(1).strip() if abstract_match else ""
 
-        # Extract sections
-        sec_matches = re.findall(r"\\(section|subsection|subsubsection)\{([^}]+)\}", full_text)
+        # Authors
+        authors = []
+        author_match = re.search(r"\\author\{([^}]+)\}", full_text)
+        if author_match:
+            raw_authors = author_match.group(1).strip()
+            for auth_part in re.split(r"\\and|,|\\\\", raw_authors):
+                clean_name = re.sub(r"\\[a-zA-Z]+(\{[^}]*\})?", "", auth_part).strip()
+                if clean_name:
+                    authors.append({"name": clean_name, "affiliation": "", "email": ""})
+        if not authors:
+            authors = [{"name": "Lead Author", "affiliation": "Institution", "email": ""}]
+
+        # Keywords
+        keywords = []
+        kw_match = re.search(r"(?:\\begin\{IEEEkeywords\}|\\keywords\{)(.*?)(?:\\end\{IEEEkeywords\}|\})", full_text, re.DOTALL)
+        if kw_match:
+            raw_kws = kw_match.group(1).strip()
+            keywords = [k.strip() for k in re.split(r"[,;•\\]", raw_kws) if k.strip() and not k.startswith("\\")]
+
+        # Extract sections with real content
+        section_pattern = r"\\(section|subsection|subsubsection)\*?\{([^}]+)\}"
+        matches = list(re.finditer(section_pattern, full_text))
         sections = []
-        sec_id = 1
-        for level_name, sec_title in sec_matches:
-            lvl = 1 if level_name == "section" else 2 if level_name == "subsection" else 3
+
+        for idx, match in enumerate(matches):
+            sec_type = match.group(1)
+            sec_title = match.group(2).strip()
+            level = 1 if sec_type == "section" else 2 if sec_type == "subsection" else 3
+
+            start_pos = match.end()
+            if idx + 1 < len(matches):
+                end_pos = matches[idx + 1].start()
+            else:
+                end_doc = full_text.find("\\end{document}", start_pos)
+                end_bib = full_text.find("\\begin{thebibliography}", start_pos)
+                valid_ends = [p for p in [end_doc, end_bib] if p != -1]
+                end_pos = min(valid_ends) if valid_ends else len(full_text)
+
+            raw_content = full_text[start_pos:end_pos].strip()
+            # Clean common LaTeX syntax from content for readability
+            clean_content = re.sub(r"\\(textbf|textit|emph)\{([^}]+)\}", r"\2", raw_content)
+            clean_content = re.sub(r"\\cite\{([^}]+)\}", r"[\1]", clean_content)
+            clean_content = re.sub(r"\\ref\{([^}]+)\}", r"\1", clean_content)
+
             sections.append({
-                "id": f"sec_{sec_id}",
+                "id": f"sec_{idx + 1}",
                 "title": sec_title,
-                "level": lvl,
-                "content": f"Content for {sec_title}",
-                "order": sec_id,
+                "level": level,
+                "content": clean_content.strip(),
+                "order": idx + 1,
                 "subsections": []
             })
-            sec_id += 1
+
+        # Figures
+        figures = []
+        fig_matches = re.finditer(r"\\begin\{figure\}(.*?)\\end\{figure\}", full_text, re.DOTALL)
+        for f_idx, fm in enumerate(fig_matches, 1):
+            fig_block = fm.group(1)
+            caption_m = re.search(r"\\caption\{([^}]+)\}", fig_block)
+            label_m = re.search(r"\\label\{([^}]+)\}", fig_block)
+            figures.append({
+                "id": f"fig_{f_idx}",
+                "caption": caption_m.group(1).strip() if caption_m else f"Figure {f_idx}",
+                "label": label_m.group(1).strip() if label_m else f"fig:{f_idx}",
+                "source": ""
+            })
+
+        # Tables
+        tables = []
+        tbl_matches = re.finditer(r"\\begin\{table\}(.*?)\\end\{table\}", full_text, re.DOTALL)
+        for t_idx, tm in enumerate(tbl_matches, 1):
+            tbl_block = tm.group(1)
+            caption_m = re.search(r"\\caption\{([^}]+)\}", tbl_block)
+            tables.append({
+                "id": f"tbl_{t_idx}",
+                "caption": caption_m.group(1).strip() if caption_m else f"Table {t_idx}",
+                "data": []
+            })
 
         return {
             "title": title,
             "abstract": abstract,
-            "keywords": [],
-            "authors": [],
+            "keywords": keywords,
+            "authors": authors,
             "raw_text": full_text,
-            "sections": sections
+            "sections": sections,
+            "figures": figures,
+            "tables": tables
         }
 
     @classmethod

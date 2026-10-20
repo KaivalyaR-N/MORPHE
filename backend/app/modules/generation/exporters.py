@@ -176,6 +176,7 @@ class LatexExporter(BaseExporter):
         metadata = cdm_data.get("metadata", {})
         sections = cdm_data.get("sections", [])
         references = cdm_data.get("references", [])
+        tables = cdm_data.get("tables", [])
 
         title = metadata.get("title", "Research Document")
         abstract = metadata.get("abstract", "")
@@ -183,14 +184,32 @@ class LatexExporter(BaseExporter):
 
         auth_latex = " \\and ".join([a.get("name", "Author") for a in authors]) if authors else "Author"
 
+        pub = publisher_code.upper() if publisher_code else "IEEE"
+        if pub == "ACM":
+            doc_class = "\\documentclass[sigconf]{acmart}"
+            author_block = "\n".join([f"\\author{{{a.get('name', 'Author')}}}\n\\affiliation{{\\institution{{{a.get('affiliation', 'Institution')}}}}}" for a in authors]) if authors else "\\author{Author}"
+        elif pub == "ELSEVIER":
+            doc_class = "\\documentclass[preprint,12pt]{elsarticle}"
+            author_block = f"\\author{{{auth_latex}}}"
+        elif pub == "SPRINGER":
+            doc_class = "\\documentclass{llncs}"
+            author_block = f"\\author{{{auth_latex}}}"
+        elif pub == "NATURE":
+            doc_class = "\\documentclass[11pt]{article}\n\\usepackage[margin=1in]{geometry}"
+            author_block = f"\\author{{{auth_latex}}}"
+        else:  # IEEE default
+            doc_class = "\\documentclass[10pt,journal,compsoc]{IEEEtran}"
+            author_block = f"\\author{{{auth_latex}}}"
+
         tex_lines = [
-            "\\documentclass[10pt,journal,compsoc]{IEEEtran}",
+            doc_class,
             "\\usepackage{cite}",
             "\\usepackage{amsmath,amssymb,amsfonts}",
             "\\usepackage{graphicx}",
+            "\\usepackage{booktabs}",
             "\\begin{document}",
             f"\\title{{{title}}}",
-            f"\\author{{{auth_latex}}}",
+            author_block,
             "\\maketitle",
         ]
 
@@ -206,6 +225,29 @@ class LatexExporter(BaseExporter):
             tex_lines.append(f"\\section{{{sec_title}}}")
             content = sec.get("content", "")
             tex_lines.append(content)
+
+        # Render Tables if any
+        for tbl in tables:
+            caption = tbl.get("caption", "Table")
+            data = tbl.get("data", [])
+            if data:
+                cols_count = max(len(r) for r in data)
+                col_spec = "c" * cols_count
+                tbl_tex = [
+                    "\\begin{table}[htbp]",
+                    f"\\caption{{{caption}}}",
+                    "\\centering",
+                    f"\\begin{{tabular}}{{{col_spec}}}",
+                    "\\toprule"
+                ]
+                for r_idx, row in enumerate(data):
+                    tbl_tex.append(" & ".join(str(cell) for cell in row) + " \\\\")
+                    if r_idx == 0:
+                        tbl_tex.append("\\midrule")
+                tbl_tex.append("\\bottomrule")
+                tbl_tex.append("\\end{tabular}")
+                tbl_tex.append("\\end{table}")
+                tex_lines.append("\n".join(tbl_tex))
 
         if references:
             tex_lines.extend([
@@ -227,6 +269,7 @@ class HtmlExporter(BaseExporter):
         metadata = cdm_data.get("metadata", {})
         sections = cdm_data.get("sections", [])
         references = cdm_data.get("references", [])
+        tables = cdm_data.get("tables", [])
 
         title = metadata.get("title", "Research Document")
         abstract = metadata.get("abstract", "")
@@ -236,6 +279,14 @@ class HtmlExporter(BaseExporter):
         sections_html = ""
         for sec in sections:
             sections_html += f"<section><h2>{sec.get('title')}</h2><p>{sec.get('content')}</p></section>"
+
+        tables_html = ""
+        for tbl in tables:
+            caption = tbl.get("caption", "Table")
+            data = tbl.get("data", [])
+            if data:
+                rows_html = "".join(["<tr>" + "".join([f"<td>{cell}</td>" for cell in row]) + "</tr>" for row in data])
+                tables_html += f"<div class='table-container'><h3>{caption}</h3><table>{rows_html}</table></div>"
 
         references_html = ""
         if references:
@@ -253,6 +304,9 @@ class HtmlExporter(BaseExporter):
         .abstract {{ background: #f8fafc; padding: 16px; border-left: 4px solid #2563eb; margin-bottom: 24px; }}
         h2 {{ font-size: 18px; border-bottom: 1px solid #ddd; padding-bottom: 4px; color: #1e293b; margin-top: 24px; }}
         section {{ margin-bottom: 16px; }}
+        table {{ border-collapse: collapse; width: 100%; margin: 16px 0; }}
+        td, th {{ border: 1px solid #cbd5e1; padding: 8px; text-align: left; font-size: 13px; }}
+        .table-container h3 {{ font-size: 14px; margin-bottom: 6px; }}
     </style>
 </head>
 <body>
@@ -263,6 +317,7 @@ class HtmlExporter(BaseExporter):
     {f'<div class="abstract"><strong>Abstract — </strong>{abstract}</div>' if abstract else ''}
     <main>
         {sections_html}
+        {tables_html}
         {references_html}
     </main>
 </body>

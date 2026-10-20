@@ -51,8 +51,8 @@ class CDMService:
                 "authors": authors
             },
             "sections": formatted_sections,
-            "figures": [],
-            "tables": [],
+            "figures": parsed_data.get("figures", []),
+            "tables": parsed_data.get("tables", []),
             "references": references,
             "citations": [],
             "appendices": []
@@ -66,7 +66,7 @@ class CDMService:
             split_parts = text.split("References") if "References" in text else text.split("REFERENCES")
             ref_block = split_parts[-1]
             lines = [line.strip() for line in ref_block.split("\n") if line.strip()]
-            for line in lines[:20]:
+            for line in lines[:30]:
                 if len(line) > 15:
                     references.append(line)
         return references

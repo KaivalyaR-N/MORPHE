@@ -14,27 +14,32 @@ export default function ExportsPage() {
     },
   });
 
-  const handleDownload = (exportId: string) => {
-    const token = localStorage.getItem("morphe_token");
-    const downloadUrl = `http://localhost:8000/api/v1/exports/${exportId}/download`;
-    
-    // Trigger file download
-    fetch(downloadUrl, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+  const getFileExtension = (format: string) => {
+    switch (format?.toUpperCase()) {
+      case "PDF": return ".pdf";
+      case "DOCX": return ".docx";
+      case "LATEX": return ".tex";
+      case "HTML": return ".html";
+      default: return ".bin";
+    }
+  };
+
+  const handleDownload = (exportId: string, format: string) => {
+    const ext = getFileExtension(format);
+    api.get(`/exports/${exportId}/download`, {
+      responseType: "blob",
     })
-      .then((res) => res.blob())
-      .then((blob) => {
-        const url = window.URL.createObjectURL(blob);
+      .then((res) => {
+        const url = window.URL.createObjectURL(new Blob([res.data]));
         const a = document.createElement("a");
         a.href = url;
-        a.download = `export_${exportId.substring(0, 8)}`;
+        a.download = `morphe_export_${exportId.substring(0, 8)}${ext}`;
         document.body.appendChild(a);
         a.click();
         a.remove();
+        window.URL.revokeObjectURL(url);
       })
-      .catch((err) => alert("Failed to download artifact: " + err.message));
+      .catch((err) => alert("Failed to download artifact: " + (err.response?.data?.detail || err.message)));
   };
 
   return (
@@ -82,7 +87,7 @@ export default function ExportsPage() {
                 </div>
 
                 <button
-                  onClick={() => handleDownload(art.id)}
+                  onClick={() => handleDownload(art.id, art.format)}
                   className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex items-center gap-2 shadow-sm transition-all"
                 >
                   <Download className="h-4 w-4" /> Download File
