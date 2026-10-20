@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+from typing import Optional, Dict, Any
 from sqlalchemy import String, DateTime, ForeignKey, Text, JSON, Float, Integer, Boolean, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
@@ -29,6 +30,7 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    preferences: Mapped[Optional[dict]] = mapped_column(JSON, default=dict, nullable=True)
 
     projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
 

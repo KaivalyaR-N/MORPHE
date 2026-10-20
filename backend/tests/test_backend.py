@@ -207,4 +207,23 @@ We formulate pulse synthesis via optimal control.
         orig_dl = await ac.get(f"/api/v1/documents/{doc_id}/download-original", headers=headers)
         assert orig_dl.status_code == 200
         assert b"Efficient Neural Architecture Search" in orig_dl.content
+        # 18. Update User Profile & Preferences (Settings)
+        profile_res = await ac.put("/api/v1/auth/profile", json={
+            "full_name": "Dr. Test Senior Researcher",
+            "preferences": {
+                "affiliation": "MIT CSAIL",
+                "ai_model": "gemini-1.5-pro",
+                "default_publisher": "IEEE"
+            }
+        }, headers=headers)
+        assert profile_res.status_code == 200
+        p_data = profile_res.json()["data"]
+        assert p_data["full_name"] == "Dr. Test Senior Researcher"
+        assert p_data["preferences"]["ai_model"] == "gemini-1.5-pro"
+
+        # Verify /auth/me returns updated preferences
+        me_res = await ac.get("/api/v1/auth/me", headers=headers)
+        assert me_res.status_code == 200
+        assert me_res.json()["data"]["preferences"]["affiliation"] == "MIT CSAIL"
+
 
