@@ -181,3 +181,25 @@ We formulate pulse synthesis via optimal control.
         assert tex_cdm.status_code == 200
         sec1 = tex_cdm.json()["data"]["cdm_data"]["sections"][0]
         assert "Quantum computing" in sec1["content"]
+
+        # 15. Knowledge base seeded publishers and styles
+        pub_res = await ac.get("/api/v1/knowledge/publishers", headers=headers)
+        assert pub_res.status_code == 200
+        pubs = pub_res.json()["data"]
+        assert len(pubs) >= 5
+        pub_codes = [p["code"] for p in pubs]
+        assert "IEEE" in pub_codes
+        assert "ACM" in pub_codes
+
+        styles_res = await ac.get("/api/v1/knowledge/styles", headers=headers)
+        assert styles_res.status_code == 200
+        styles = styles_res.json()["data"]
+        assert len(styles) >= 4
+
+        # 16. Citation Cross-referencing Validation test
+        val_res = await ac.get(f"/api/v1/validation/{tex_doc_id}", headers=headers)
+        assert val_res.status_code == 200
+        val_data = val_res.json()["data"]["validation"]
+        assert "citation_issues" in val_data
+        assert "structural_issues" in val_data
+        assert isinstance(val_data["citation_issues"], list)
