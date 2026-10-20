@@ -113,12 +113,20 @@ References
         assert rb_res.json()["data"]["version_number"] == 3
         assert "Rollback to Version 1" in rb_res.json()["data"]["commit_message"]
 
-        # 9. AI Assistant test
+        # 9. AI Assistant test & conversation persistence
         ai_res = await ac.post(f"/api/v1/ai/assistant/{doc_id}", json={
             "action": "improve_wording",
             "selected_text": "We formulate network architecture search as a Markov decision process."
         }, headers=headers)
         assert ai_res.status_code == 200
+
+        # Retrieve conversation history
+        conv_res = await ac.get(f"/api/v1/ai/conversation/{doc_id}", headers=headers)
+        assert conv_res.status_code == 200
+        msgs = conv_res.json()["data"]["messages"]
+        assert len(msgs) >= 2
+        assert msgs[0]["role"] == "user"
+        assert msgs[1]["role"] == "assistant"
 
         # 10. Generate Export Artifact (PDF)
         gen_res = await ac.post(f"/api/v1/generation/generate/{doc_id}", json={
