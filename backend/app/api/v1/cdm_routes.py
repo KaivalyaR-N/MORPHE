@@ -164,3 +164,95 @@ async def update_cdm(
 
     resp = DocumentVersionResponse.model_validate(new_version)
     return APIResponse(success=True, data=resp.model_dump())
+
+
+@router.post("/{document_id}/rollback/{version_number}", response_model=APIResponse)
+async def rollback_cdm_version(
+    document_id: str,
+    version_number: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    doc_res = await db.execute(
+        select(Document).join(Project).where(Document.id == document_id, Project.owner_id == current_user.id)
+    )
+    document = doc_res.scalar_one_or_none()
+    if not document:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+
+    # Find target version to restore
+    target_v_res = await db.execute(
+        select(DocumentVersion).where(
+            DocumentVersion.document_id == document_id,
+            DocumentVersion.version_number == version_number
+        )
+    )
+    target_version = target_v_res.scalar_one_or_none()
+    if not target_version:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Target version {version_number} not found.")
+
+    cdm_data = target_version.cdm_data
+
+    # Update document title if present
+    if cdm_data.get("metadata", {}).get("title"):
+        document.title = cdm_data["metadata"]["title"]
+
+    # Determine next version number
+    v_res = await db.execute(
+        select(func.max(DocumentVersion.version_number)).where(DocumentVersion.document_id == document_id)
+    )
+    curr_max = v_res.scalar() or 0
+    new_version_num = curr_max + 1
+
+    new_version = DocumentVersion(
+        document_id=document_id,
+        version_number=new_version_num,
+        cdm_data=cdm_data,
+        commit_message=f"Rollback to Version {version_number}"
+    )
+    db.add(new_version)
+    await db.commit()
+    await db.refresh(new_version)
+
+    # Re-run analyses
+    nlp_dict = NLPService.analyze_cdm(cdm_data)
+    nlp_record = NLPAnalysis(
+        document_version_id=new_version.id,
+        keywords=nlp_dict.get("keywords", []),
+        entities=nlp_dict.get("entities", []),
+        terminology=nlp_dict.get("terminology", []),
+        citation_patterns=nlp_dict.get("citation_patterns", {}),
+        summary=nlp_dict.get("summary")
+    )
+    db.add(nlp_record)
+
+    domain_dict = DomainIntelligenceService.analyze_domain_and_structure(cdm_data)
+    d_info = domain_dict["domain_analysis"]
+    domain_record = DomainAnalysis(
+        document_version_id=new_version.id,
+        primary_domain=d_info["primary_domain"],
+        subdomain=d_info["subdomain"],
+        research_type=d_info["research_type"],
+        publication_type=d_info["publication_type"],
+        citation_style=d_info["citation_style"],
+        confidence=d_info["confidence"],
+        evidence=d_info["evidence"]
+    )
+    db.add(domain_record)
+
+    val_dict = ValidationService.validate_document(cdm_data, target_publisher_code="IEEE")
+    val_record = ValidationResult(
+        document_version_id=new_version.id,
+        structural_issues=val_dict["structural_issues"],
+        metadata_issues=val_dict["metadata_issues"],
+        citation_issues=val_dict["citation_issues"],
+        content_issues=val_dict["content_issues"],
+        publisher_compliance=val_dict["publisher_compliance"],
+        overall_score=val_dict["overall_score"]
+    )
+    db.add(val_record)
+
+    await db.commit()
+
+    resp = DocumentVersionResponse.model_validate(new_version)
+    return APIResponse(success=True, data=resp.model_dump())
