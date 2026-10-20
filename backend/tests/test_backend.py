@@ -107,6 +107,12 @@ References
         assert update_res.status_code == 200
         assert update_res.json()["data"]["version_number"] == 2
 
+        # Rollback CDM test
+        rb_res = await ac.post(f"/api/v1/cdm/{doc_id}/rollback/1", headers=headers)
+        assert rb_res.status_code == 200
+        assert rb_res.json()["data"]["version_number"] == 3
+        assert "Rollback to Version 1" in rb_res.json()["data"]["commit_message"]
+
         # 9. AI Assistant test
         ai_res = await ac.post(f"/api/v1/ai/assistant/{doc_id}", json={
             "action": "improve_wording",

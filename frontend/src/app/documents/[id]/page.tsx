@@ -22,7 +22,13 @@ import {
   RefreshCw,
   ExternalLink,
   Layers,
-  Check
+  Check,
+  Clock,
+  RotateCcw,
+  BookMarked,
+  Table as TableIcon,
+  Image as ImageIcon,
+  X
 } from "lucide-react";
 
 export default function DocumentWorkspacePage() {
@@ -34,6 +40,7 @@ export default function DocumentWorkspacePage() {
   const [cdmState, setCdmState] = useState<any>(null);
   const [commitMessage, setCommitMessage] = useState("Updated via CDM Editor");
   const [selectedPublisher, setSelectedPublisher] = useState("IEEE");
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   // State for AI Assistant
   const [aiAction, setAiAction] = useState("improve_wording");
@@ -43,6 +50,7 @@ export default function DocumentWorkspacePage() {
 
   // State for Generation
   const [exportFormat, setExportFormat] = useState("PDF");
+  const [lastGeneratedExport, setLastGeneratedExport] = useState<any>(null);
 
   // Fetch document metadata
   const { data: document, isLoading: docLoading } = useQuery({
@@ -63,6 +71,15 @@ export default function DocumentWorkspacePage() {
         setCdmState(data.cdm_data);
       }
       return data;
+    },
+  });
+
+  // Fetch versions history
+  const { data: versionsList } = useQuery({
+    queryKey: ["versions", documentId],
+    queryFn: async () => {
+      const res = await api.get(`/cdm/${documentId}/versions`);
+      return res.data.data;
     },
   });
 
@@ -91,10 +108,29 @@ export default function DocumentWorkspacePage() {
       return res.data.data;
     },
     onSuccess: (data) => {
+      setCdmState(data.cdm_data);
       queryClient.invalidateQueries({ queryKey: ["cdm", documentId] });
+      queryClient.invalidateQueries({ queryKey: ["versions", documentId] });
       queryClient.invalidateQueries({ queryKey: ["analysis", documentId] });
       queryClient.invalidateQueries({ queryKey: ["validation", documentId] });
       alert(`Saved CDM Version ${data.version_number} successfully!`);
+    },
+  });
+
+  // Rollback Mutation
+  const rollbackMutation = useMutation({
+    mutationFn: async (targetVer: number) => {
+      const res = await api.post(`/cdm/${documentId}/rollback/${targetVer}`);
+      return res.data.data;
+    },
+    onSuccess: (data) => {
+      setCdmState(data.cdm_data);
+      queryClient.invalidateQueries({ queryKey: ["cdm", documentId] });
+      queryClient.invalidateQueries({ queryKey: ["versions", documentId] });
+      queryClient.invalidateQueries({ queryKey: ["analysis", documentId] });
+      queryClient.invalidateQueries({ queryKey: ["validation", documentId] });
+      setIsHistoryOpen(false);
+      alert(`Restored document to Version ${data.version_number}!`);
     },
   });
 
@@ -116,10 +152,38 @@ export default function DocumentWorkspacePage() {
       return res.data.data;
     },
     onSuccess: (data) => {
-      alert(`Export artifact generated successfully! Click download below.`);
+      setLastGeneratedExport(data);
       queryClient.invalidateQueries({ queryKey: ["exports"] });
     },
   });
+
+  const getFileExtension = (format: string) => {
+    switch (format?.toUpperCase()) {
+      case "PDF": return ".pdf";
+      case "DOCX": return ".docx";
+      case "LATEX": return ".tex";
+      case "HTML": return ".html";
+      default: return ".bin";
+    }
+  };
+
+  const handleDownloadArtifact = (exportId: string, format: string) => {
+    const ext = getFileExtension(format);
+    api.get(`/exports/${exportId}/download`, {
+      responseType: "blob",
+    })
+      .then((res) => {
+        const url = window.URL.createObjectURL(new Blob([res.data]));
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `morphe_export_${exportId.substring(0, 8)}${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      })
+      .catch((err) => alert("Failed to download artifact: " + (err.response?.data?.detail || err.message)));
+  };
 
   if (docLoading || cdmLoading) {
     return (
@@ -153,6 +217,16 @@ export default function DocumentWorkspacePage() {
     });
   };
 
+  const handleApplyAItoAbstract = (text: string) => {
+    // Strip prefixes like "Generated Abstract:\n\n"
+    const cleaned = text.replace(/^(Generated Abstract:\s*|Enhanced Academic Wording:\s*|Summary of '[^']+':\s*)/i, "").trim();
+    setCdmState({
+      ...cdm,
+      metadata: { ...cdm.metadata, abstract: cleaned }
+    });
+    alert("Applied AI generated text into Document Abstract! Click 'Save CDM Version' to commit.");
+  };
+
   const handleGenerateExport = () => {
     exportMutation.mutate({
       format: exportFormat,
@@ -183,6 +257,14 @@ export default function DocumentWorkspacePage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsHistoryOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs border border-slate-300 shadow-sm"
+          >
+            <Clock className="h-3.5 w-3.5 text-slate-600" />
+            History ({versionsList?.length ?? 1} commits)
+          </button>
+
           <button
             onClick={handleSaveCDM}
             disabled={saveCdmMutation.isPending}
@@ -283,6 +365,19 @@ export default function DocumentWorkspacePage() {
                     })
                   }
                   className="w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Commit Message for next version
+                </label>
+                <input
+                  type="text"
+                  value={commitMessage}
+                  onChange={(e) => setCommitMessage(e.target.value)}
+                  placeholder="e.g. Updated methodology section and added bibliography"
+                  className="w-full rounded-lg border border-slate-300 px-3.5 py-2 text-xs text-slate-600 focus:border-blue-500"
                 />
               </div>
             </div>
@@ -412,6 +507,198 @@ export default function DocumentWorkspacePage() {
                   />
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* References & Citations */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                <BookMarked className="h-4 w-4 text-blue-600" /> Bibliography & References
+              </h3>
+              <button
+                onClick={() => {
+                  const currentRefs = cdm.references || [];
+                  const nextId = currentRefs.length + 1;
+                  setCdmState({
+                    ...cdm,
+                    references: [
+                      ...currentRefs,
+                      {
+                        id: `ref_${nextId}`,
+                        key: `[${nextId}]`,
+                        title: "New Reference Title",
+                        text: `[${nextId}] Author, "Title", Journal, 2024.`,
+                        authors: ["Author et al."],
+                        year: "2024",
+                        venue: "Conference/Journal",
+                        doi: ""
+                      }
+                    ]
+                  });
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 font-semibold text-xs hover:bg-blue-100"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add Reference
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {(cdm.references || []).length === 0 ? (
+                <p className="text-xs text-slate-400 italic">No references extracted yet. Click Add Reference above.</p>
+              ) : (
+                (cdm.references || []).map((ref: any, idx: number) => (
+                  <div key={ref.id || idx} className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">
+                        {ref.key || `[${idx + 1}]`}
+                      </span>
+                      <input
+                        type="text"
+                        placeholder="Full Reference Text / Citation string"
+                        value={ref.text || ""}
+                        onChange={(e) => {
+                          const newRefs = [...cdm.references];
+                          newRefs[idx].text = e.target.value;
+                          setCdmState({ ...cdm, references: newRefs });
+                        }}
+                        className="flex-1 rounded border border-slate-300 px-3 py-1 text-xs text-slate-800"
+                      />
+                      <button
+                        onClick={() => {
+                          const newRefs = cdm.references.filter((_: any, i: number) => i !== idx);
+                          setCdmState({ ...cdm, references: newRefs });
+                        }}
+                        className="text-rose-500 hover:text-rose-700 p-1"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Tables & Figures */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Tables */}
+            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                  <TableIcon className="h-4 w-4 text-emerald-600" /> Tables ({cdm.tables?.length || 0})
+                </h4>
+                <button
+                  onClick={() => {
+                    const currentTables = cdm.tables || [];
+                    const nextId = currentTables.length + 1;
+                    setCdmState({
+                      ...cdm,
+                      tables: [
+                        ...currentTables,
+                        {
+                          id: `tbl_${nextId}`,
+                          caption: `Table ${nextId}: Experimental Results`,
+                          data: [["Method", "Accuracy", "Latency"], ["Baseline", "89.2%", "45ms"], ["Proposed", "96.4%", "27ms"]]
+                        }
+                      ]
+                    });
+                  }}
+                  className="text-xs text-emerald-600 font-semibold hover:underline flex items-center gap-1"
+                >
+                  <Plus className="h-3 w-3" /> Add Table
+                </button>
+              </div>
+
+              {(cdm.tables || []).length === 0 ? (
+                <p className="text-xs text-slate-400">No tables defined.</p>
+              ) : (
+                (cdm.tables || []).map((t: any, idx: number) => (
+                  <div key={t.id || idx} className="p-3 bg-slate-50 rounded border border-slate-200 text-xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <input
+                        type="text"
+                        value={t.caption || ""}
+                        onChange={(e) => {
+                          const newTables = [...cdm.tables];
+                          newTables[idx].caption = e.target.value;
+                          setCdmState({ ...cdm, tables: newTables });
+                        }}
+                        className="font-semibold text-slate-900 bg-white border border-slate-300 rounded px-2 py-0.5 text-xs w-full mr-2"
+                      />
+                      <button
+                        onClick={() => {
+                          const newTables = cdm.tables.filter((_: any, i: number) => i !== idx);
+                          setCdmState({ ...cdm, tables: newTables });
+                        }}
+                        className="text-rose-500 hover:text-rose-700"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Figures */}
+            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                  <ImageIcon className="h-4 w-4 text-purple-600" /> Figures ({cdm.figures?.length || 0})
+                </h4>
+                <button
+                  onClick={() => {
+                    const currentFigs = cdm.figures || [];
+                    const nextId = currentFigs.length + 1;
+                    setCdmState({
+                      ...cdm,
+                      figures: [
+                        ...currentFigs,
+                        {
+                          id: `fig_${nextId}`,
+                          caption: `Figure ${nextId}: Architecture Diagram`,
+                          label: `fig:${nextId}`,
+                          source: ""
+                        }
+                      ]
+                    });
+                  }}
+                  className="text-xs text-purple-600 font-semibold hover:underline flex items-center gap-1"
+                >
+                  <Plus className="h-3 w-3" /> Add Figure
+                </button>
+              </div>
+
+              {(cdm.figures || []).length === 0 ? (
+                <p className="text-xs text-slate-400">No figures defined.</p>
+              ) : (
+                (cdm.figures || []).map((f: any, idx: number) => (
+                  <div key={f.id || idx} className="p-3 bg-slate-50 rounded border border-slate-200 text-xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <input
+                        type="text"
+                        value={f.caption || ""}
+                        onChange={(e) => {
+                          const newFigs = [...cdm.figures];
+                          newFigs[idx].caption = e.target.value;
+                          setCdmState({ ...cdm, figures: newFigs });
+                        }}
+                        className="font-semibold text-slate-900 bg-white border border-slate-300 rounded px-2 py-0.5 text-xs w-full mr-2"
+                      />
+                      <button
+                        onClick={() => {
+                          const newFigs = cdm.figures.filter((_: any, i: number) => i !== idx);
+                          setCdmState({ ...cdm, figures: newFigs });
+                        }}
+                        className="text-rose-500 hover:text-rose-700"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -650,6 +937,15 @@ export default function DocumentWorkspacePage() {
                     {aiResponse.result}
                   </div>
 
+                  {aiAction === "generate_abstract" && (
+                    <button
+                      onClick={() => handleApplyAItoAbstract(aiResponse.result)}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Check className="h-3.5 w-3.5" /> Apply AI Abstract to CDM
+                    </button>
+                  )}
+
                   <div>
                     <h4 className="font-bold text-xs uppercase tracking-wider text-slate-400 mb-2">Suggestions</h4>
                     <ul className="space-y-1">
@@ -721,6 +1017,94 @@ export default function DocumentWorkspacePage() {
               <Download className="h-4 w-4" />
               {exportMutation.isPending ? "Generating Export File..." : `Generate ${exportFormat} Output`}
             </button>
+
+            {lastGeneratedExport && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-emerald-950 text-sm">
+                    {lastGeneratedExport.format} Document Generated!
+                  </h4>
+                  <p className="text-xs text-emerald-700">
+                    Publisher: {lastGeneratedExport.publisher_code || "IEEE"} | Size: {Math.round(lastGeneratedExport.file_size / 1024)} KB
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleDownloadArtifact(lastGeneratedExport.id, lastGeneratedExport.format)}
+                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm"
+                >
+                  <Download className="h-4 w-4" /> Download File Now
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* VERSION HISTORY MODAL */}
+      {isHistoryOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-blue-600" /> CDM Version Commit History
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">Browse all revisions or rollback to a previous state.</p>
+              </div>
+              <button
+                onClick={() => setIsHistoryOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto space-y-3 flex-1">
+              {(versionsList || []).map((ver: any) => {
+                const isCurrent = ver.version_number === cdmVersion?.version_number;
+                return (
+                  <div
+                    key={ver.id}
+                    className={`p-4 rounded-xl border flex items-center justify-between transition-all ${
+                      isCurrent
+                        ? "bg-blue-50/60 border-blue-300 ring-1 ring-blue-300"
+                        : "bg-slate-50 border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-xs px-2 py-0.5 rounded bg-blue-600 text-white">
+                          v{ver.version_number}
+                        </span>
+                        <h4 className="font-bold text-slate-900 text-sm">{ver.commit_message || "Revision Commit"}</h4>
+                        {isCurrent && (
+                          <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Committed: {new Date(ver.created_at).toLocaleString()}
+                      </p>
+                    </div>
+
+                    {!isCurrent && (
+                      <button
+                        onClick={() => {
+                          if (confirm(`Rollback to Version ${ver.version_number}? Current changes will be committed as a new version.`)) {
+                            rollbackMutation.mutate(ver.version_number);
+                          }
+                        }}
+                        disabled={rollbackMutation.isPending}
+                        className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 font-semibold text-xs flex items-center gap-1 shadow-sm"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5 text-blue-600" /> Restore
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
