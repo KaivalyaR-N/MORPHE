@@ -1,4 +1,6 @@
+import os
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List, Optional
@@ -196,6 +198,42 @@ async def get_document(
     d_dict = DocumentResponse.model_validate(document).model_dump()
     d_dict["latest_version_number"] = max_ver
     return APIResponse(success=True, data=d_dict)
+
+
+@router.get("/{document_id}/download-original")
+async def download_original_document(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    doc_res = await db.execute(
+        select(Document).join(Project).where(Document.id == document_id, Project.owner_id == current_user.id)
+    )
+    document = doc_res.scalar_one_or_none()
+    if not document:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+
+    asset_res = await db.execute(
+        select(FileAsset).where(FileAsset.document_id == document.id).order_by(FileAsset.created_at.asc())
+    )
+    asset = asset_res.scalars().first()
+    if not asset or not os.path.exists(asset.file_path):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Original source file not found on disk.")
+
+    media_type_map = {
+        "pdf": "application/pdf",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "tex": "application/x-tex",
+        "txt": "text/plain",
+        "md": "text/markdown",
+    }
+    media_type = media_type_map.get(document.file_type.lower(), "application/octet-stream")
+
+    return FileResponse(
+        path=asset.file_path,
+        media_type=media_type,
+        filename=document.original_filename or f"document.{document.file_type}"
+    )
 
 
 @router.delete("/{document_id}", response_model=APIResponse)
