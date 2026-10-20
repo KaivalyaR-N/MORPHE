@@ -28,7 +28,9 @@ import {
   BookMarked,
   Table as TableIcon,
   Image as ImageIcon,
-  X
+  X,
+  MessageSquare,
+  Bot
 } from "lucide-react";
 
 export default function DocumentWorkspacePage() {
@@ -79,6 +81,15 @@ export default function DocumentWorkspacePage() {
     queryKey: ["versions", documentId],
     queryFn: async () => {
       const res = await api.get(`/cdm/${documentId}/versions`);
+      return res.data.data;
+    },
+  });
+
+  // Fetch AI conversation history
+  const { data: conversationData } = useQuery({
+    queryKey: ["ai_conversation", documentId],
+    queryFn: async () => {
+      const res = await api.get(`/ai/conversation/${documentId}`);
       return res.data.data;
     },
   });
@@ -142,6 +153,18 @@ export default function DocumentWorkspacePage() {
     },
     onSuccess: (data) => {
       setAiResponse(data);
+      queryClient.invalidateQueries({ queryKey: ["ai_conversation", documentId] });
+    },
+  });
+
+  // Clear AI Conversation Mutation
+  const clearAiMutation = useMutation({
+    mutationFn: async () => {
+      await api.delete(`/ai/conversation/${documentId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ai_conversation", documentId] });
+      setAiResponse(null);
     },
   });
 
@@ -218,7 +241,6 @@ export default function DocumentWorkspacePage() {
   };
 
   const handleApplyAItoAbstract = (text: string) => {
-    // Strip prefixes like "Generated Abstract:\n\n"
     const cleaned = text.replace(/^(Generated Abstract:\s*|Enhanced Academic Wording:\s*|Summary of '[^']+':\s*)/i, "").trim();
     setCdmState({
       ...cdm,
@@ -919,49 +941,62 @@ export default function DocumentWorkspacePage() {
             </button>
           </div>
 
-          {/* AI Response Output */}
-          <div className="bg-slate-900 text-slate-100 rounded-xl border border-slate-800 p-6 shadow-xl space-y-4 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+          {/* AI Response Output & History */}
+          <div className="bg-slate-900 text-slate-100 rounded-xl border border-slate-800 p-6 shadow-xl space-y-4 flex flex-col justify-between max-h-[650px] overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4 shrink-0">
                 <span className="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
-                  <Sparkles className="h-4 w-4" /> AI Output Response
+                  <Bot className="h-4 w-4" /> Academic Assistant & History
                 </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                  Confidence 96%
-                </span>
+                {(conversationData?.messages?.length || 0) > 0 && (
+                  <button
+                    onClick={() => {
+                      if (confirm("Clear conversation history for this document?")) {
+                        clearAiMutation.mutate();
+                      }
+                    }}
+                    className="text-[10px] text-slate-400 hover:text-rose-400 flex items-center gap-1"
+                  >
+                    <Trash2 className="h-3 w-3" /> Clear History
+                  </button>
+                )}
               </div>
 
-              {aiResponse ? (
-                <div className="space-y-4">
-                  <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs text-slate-200 leading-relaxed font-mono whitespace-pre-wrap">
-                    {aiResponse.result}
+              <div className="overflow-y-auto space-y-4 pr-1 flex-1">
+                {(conversationData?.messages || []).length === 0 && !aiResponse && (
+                  <div className="text-center py-16 text-slate-500 text-xs">
+                    Run an AI action on the left panel to preview enhanced academic wording, generated abstracts, or section explanations.
                   </div>
+                )}
 
-                  {aiAction === "generate_abstract" && (
-                    <button
-                      onClick={() => handleApplyAItoAbstract(aiResponse.result)}
-                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm"
-                    >
-                      <Check className="h-3.5 w-3.5" /> Apply AI Abstract to CDM
-                    </button>
-                  )}
-
-                  <div>
-                    <h4 className="font-bold text-xs uppercase tracking-wider text-slate-400 mb-2">Suggestions</h4>
-                    <ul className="space-y-1">
-                      {(aiResponse.suggestions || []).map((s: string, idx: number) => (
-                        <li key={idx} className="text-xs text-slate-300 flex items-center gap-2">
-                          <Check className="h-3.5 w-3.5 text-emerald-400 shrink-0" /> {s}
-                        </li>
-                      ))}
-                    </ul>
+                {(conversationData?.messages || []).map((msg: any, idx: number) => (
+                  <div key={idx} className="space-y-1.5">
+                    {msg.role === "user" ? (
+                      <div className="p-3 rounded-lg bg-slate-800/80 border border-slate-700/60 text-xs space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-blue-400">Action: {msg.action}</span>
+                        {msg.selected_text && <p className="text-slate-300 italic">"{msg.selected_text}"</p>}
+                        {msg.prompt && <p className="text-slate-400">Note: {msg.prompt}</p>}
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 text-xs space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-emerald-400 uppercase">AI Recommendation</span>
+                          <span className="text-[10px] text-slate-500">{new Date(msg.created_at).toLocaleTimeString()}</span>
+                        </div>
+                        <div className="font-mono text-slate-200 whitespace-pre-wrap">{msg.result}</div>
+                        {msg.action === "generate_abstract" && (
+                          <button
+                            onClick={() => handleApplyAItoAbstract(msg.result)}
+                            className="px-2.5 py-1 rounded bg-emerald-600/80 hover:bg-emerald-500 text-white font-semibold text-[11px] flex items-center gap-1"
+                          >
+                            <Check className="h-3 w-3" /> Apply to Abstract
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ) : (
-                <div className="text-center py-12 text-slate-500 text-xs">
-                  Run an AI action on the left panel to preview enhanced academic wording, generated abstracts, or section explanations.
-                </div>
-              )}
+                ))}
+              </div>
             </div>
           </div>
         </div>
