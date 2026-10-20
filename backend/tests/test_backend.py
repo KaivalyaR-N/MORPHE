@@ -225,5 +225,29 @@ We formulate pulse synthesis via optimal control.
         me_res = await ac.get("/api/v1/auth/me", headers=headers)
         assert me_res.status_code == 200
         assert me_res.json()["data"]["preferences"]["affiliation"] == "MIT CSAIL"
+        # 19. Test Exporting CDM with Tables to PDF and DOCX
+        cdm_data["tables"] = [{
+            "id": "tab1",
+            "caption": "Table 1: Accuracy Benchmark Across Datasets",
+            "headers": ["Model", "Top-1 Acc", "Latency (ms)"],
+            "rows": [["MORPHE-Net", "84.2%", "12.4"], ["Baseline", "78.1%", "24.6"]]
+        }]
+        await ac.post(f"/api/v1/cdm/{doc_id}/update", json={
+            "cdm_data": cdm_data,
+            "commit_message": "Added benchmark table"
+        }, headers=headers)
+
+        pdf_tbl_res = await ac.post(f"/api/v1/generation/generate/{doc_id}", json={
+            "format": "PDF",
+            "publisher_code": "IEEE"
+        }, headers=headers)
+        assert pdf_tbl_res.status_code == 200
+
+        docx_tbl_res = await ac.post(f"/api/v1/generation/generate/{doc_id}", json={
+            "format": "DOCX",
+            "publisher_code": "ELSEVIER"
+        }, headers=headers)
+        assert docx_tbl_res.status_code == 200
+
 
 

@@ -4,7 +4,7 @@ import docx
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Tuple
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
@@ -110,6 +110,34 @@ class PdfExporter(BaseExporter):
                 if p.strip():
                     story.append(Paragraph(p.strip(), body_style))
 
+        # Tables
+        tables = cdm_data.get("tables", [])
+        if tables:
+            story.append(Spacer(1, 10))
+            for idx, tbl in enumerate(tables, 1):
+                caption = tbl.get("caption") or f"Table {idx}"
+                story.append(Paragraph(f"<b>{caption}</b>", heading_style))
+                headers = tbl.get("headers", [])
+                rows = tbl.get("rows", [])
+                table_matrix = []
+                if headers:
+                    table_matrix.append([Paragraph(f"<b>{str(h)}</b>", body_style) for h in headers])
+                for r in rows:
+                    if isinstance(r, list):
+                        table_matrix.append([Paragraph(str(c), body_style) for c in r])
+                if table_matrix:
+                    rl_tbl = Table(table_matrix, hAlign='LEFT')
+                    rl_tbl.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F1F5F9')),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#0F172A')),
+                        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                        ('TOPPADDING', (0, 0), (-1, -1), 4),
+                        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+                    ]))
+                    story.append(rl_tbl)
+                    story.append(Spacer(1, 8))
+
         # References
         if references:
             story.append(Spacer(1, 10))
@@ -156,6 +184,29 @@ class DocxExporter(BaseExporter):
             for para in content.split("\n\n"):
                 if para.strip():
                     doc.add_paragraph(para.strip())
+
+        # Tables
+        tables = cdm_data.get("tables", [])
+        for idx, tbl in enumerate(tables, 1):
+            caption = tbl.get("caption") or f"Table {idx}"
+            doc.add_heading(caption, level=2)
+            headers = tbl.get("headers", [])
+            rows = tbl.get("rows", [])
+            num_cols = max(len(headers), max((len(r) for r in rows), default=0))
+            if num_cols > 0:
+                t = doc.add_table(rows=0, cols=num_cols)
+                t.style = 'Table Grid'
+                if headers:
+                    hdr_cells = t.add_row().cells
+                    for i, h in enumerate(headers):
+                        if i < num_cols:
+                            hdr_cells[i].text = str(h)
+                for r in rows:
+                    if isinstance(r, list):
+                        row_cells = t.add_row().cells
+                        for i, c in enumerate(r):
+                            if i < num_cols:
+                                row_cells[i].text = str(c)
 
         # References
         if references:
