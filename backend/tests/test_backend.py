@@ -132,3 +132,38 @@ References
         analytics_res = await ac.get("/api/v1/analytics", headers=headers)
         assert analytics_res.status_code == 200
         assert analytics_res.json()["data"]["total_projects"] >= 1
+
+        # 13. Test LaTeX generation with publisher class (ACM)
+        latex_gen = await ac.post(f"/api/v1/generation/generate/{doc_id}", json={
+            "format": "LATEX",
+            "publisher_code": "ACM"
+        }, headers=headers)
+        assert latex_gen.status_code == 200
+        assert latex_gen.json()["data"]["format"] == "LATEX"
+
+        # 14. Test LaTeX Document upload & parsing
+        sample_tex = r"""\documentclass{article}
+\title{Quantum Circuit Optimization}
+\author{Alice Smith \and Bob Jones}
+\begin{abstract}
+We demonstrate a scalable quantum circuit synthesis framework with verified depth bounds.
+\end{abstract}
+\section{Introduction}
+Quantum computing promises exponential acceleration.
+\section{Methodology}
+We formulate pulse synthesis via optimal control.
+\begin{thebibliography}{1}
+\bibitem{q1} Nielsen and Chuang, Quantum Computation, 2010.
+\end{thebibliography}
+\end{document}"""
+        tex_files = {"file": ("paper.tex", sample_tex.encode("utf-8"), "application/x-tex")}
+        tex_data = {"project_id": project_id}
+        tex_up = await ac.post("/api/v1/documents/upload", files=tex_files, data=tex_data, headers=headers)
+        assert tex_up.status_code == 200
+        tex_doc_id = tex_up.json()["data"]["id"]
+
+        # Verify CDM extracted actual content rather than dummy strings
+        tex_cdm = await ac.get(f"/api/v1/cdm/{tex_doc_id}", headers=headers)
+        assert tex_cdm.status_code == 200
+        sec1 = tex_cdm.json()["data"]["cdm_data"]["sections"][0]
+        assert "Quantum computing" in sec1["content"]
