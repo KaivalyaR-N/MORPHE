@@ -8,6 +8,7 @@ export interface User {
   email: string;
   full_name: string;
   role: string;
+  preferences?: Record<string, any>;
 }
 
 interface AuthContextType {
@@ -42,28 +43,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    const res = await api.post("/auth/login", { email, password });
-    if (res.data.success) {
-      const { access_token, user } = res.data.data;
-      setToken(access_token);
-      setUser(user);
-      localStorage.setItem("morphe_token", access_token);
-      localStorage.setItem("morphe_user", JSON.stringify(user));
-    } else {
-      throw new Error(res.data.error?.message || "Login failed");
+    try {
+      const res = await api.post("/auth/login", { email, password });
+      if (res.data.success) {
+        const { access_token, user } = res.data.data;
+        setToken(access_token);
+        setUser(user);
+        localStorage.setItem("morphe_token", access_token);
+        localStorage.setItem("morphe_user", JSON.stringify(user));
+      } else {
+        throw new Error(res.data.error?.message || "Login failed");
+      }
+    } catch (err: any) {
+      const errMsg =
+        err.response?.data?.error?.message ||
+        (typeof err.response?.data?.detail === "string" ? err.response?.data?.detail : null) ||
+        err.message ||
+        "Login failed. Please check your credentials.";
+      throw new Error(errMsg);
     }
   };
 
   const register = async (email: string, password: string, full_name: string, role: string = "RESEARCHER") => {
-    const res = await api.post("/auth/register", { email, password, full_name, role });
-    if (res.data.success) {
-      const { access_token, user } = res.data.data;
-      setToken(access_token);
-      setUser(user);
-      localStorage.setItem("morphe_token", access_token);
-      localStorage.setItem("morphe_user", JSON.stringify(user));
-    } else {
-      throw new Error(res.data.error?.message || "Registration failed");
+    try {
+      const res = await api.post("/auth/register", { email, password, full_name, role });
+      if (res.data.success) {
+        const { access_token, user } = res.data.data;
+        setToken(access_token);
+        setUser(user);
+        localStorage.setItem("morphe_token", access_token);
+        localStorage.setItem("morphe_user", JSON.stringify(user));
+      } else {
+        throw new Error(res.data.error?.message || "Registration failed");
+      }
+    } catch (err: any) {
+      const errMsg =
+        err.response?.data?.error?.message ||
+        (typeof err.response?.data?.detail === "string" ? err.response?.data?.detail : null) ||
+        err.message ||
+        "Registration failed. Please ensure email format and password length (min 6 characters) are valid.";
+      throw new Error(errMsg);
     }
   };
 
