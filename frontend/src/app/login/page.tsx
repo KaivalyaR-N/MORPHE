@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { Sparkles, ArrowRight, ShieldCheck } from "lucide-react";
+import { Sparkles, ArrowRight, ShieldCheck, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,6 +31,7 @@ export default function LoginPage() {
   const fillDemoCredentials = () => {
     setEmail("researcher@morphe.org");
     setPassword("Password123!");
+    setError("");
   };
 
   return (
@@ -53,12 +54,13 @@ export default function LoginPage() {
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md z-10">
         <div className="bg-slate-900/90 border border-slate-800 backdrop-blur-xl py-8 px-6 shadow-2xl rounded-2xl sm:px-10">
           {error && (
-            <div className="mb-4 bg-rose-500/10 border border-rose-500/30 text-rose-400 px-4 py-3 rounded-lg text-sm font-medium">
-              {error}
+            <div className="mb-4 bg-rose-500/10 border border-rose-500/30 text-rose-400 px-4 py-3 rounded-lg text-sm font-medium flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+              <span>{error}</span>
             </div>
           )}
 
-          <form className="space-y-5" onSubmit={handleSubmit}>
+          <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
                 Email Address
@@ -94,6 +96,15 @@ export default function LoginPage() {
             >
               {loading ? "Signing in..." : "Sign In to Workspace"}
               <ArrowRight className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={fillDemoCredentials}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-300 font-medium text-xs border border-slate-700 transition-colors"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+              Fill Demo Credentials (researcher@morphe.org)
             </button>
           </form>
 
