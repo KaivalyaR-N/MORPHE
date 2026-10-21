@@ -44,6 +44,7 @@ export default function DocumentWorkspacePage() {
   const [commitMessage, setCommitMessage] = useState("Updated via CDM Editor");
   const [selectedPublisher, setSelectedPublisher] = useState("IEEE");
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isTransformingIEEE, setIsTransformingIEEE] = useState(false);
 
   // State for AI Assistant
   const [aiAction, setAiAction] = useState("improve_wording");
@@ -256,6 +257,26 @@ export default function DocumentWorkspacePage() {
     setAiPrompt(`Draft a standard research outline and academic paragraphs for missing section: ${secName}`);
   };
 
+  const handleTransformToIEEE = async () => {
+    setIsTransformingIEEE(true);
+    try {
+      const res = await api.post(`/cdm/${documentId}/transform/ieee`);
+      if (res.data.success) {
+        setCdmState(res.data.data.cdm_data);
+        queryClient.invalidateQueries({ queryKey: ["cdm", documentId] });
+        queryClient.invalidateQueries({ queryKey: ["validation", documentId] });
+        queryClient.invalidateQueries({ queryKey: ["versions", documentId] });
+        setSelectedPublisher("IEEE");
+        setActiveTab("validation");
+        alert("Paper successfully transformed into standard IEEE format with Roman numeral sections and Index Terms!");
+      }
+    } catch (err: any) {
+      alert("Failed to transform to IEEE: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setIsTransformingIEEE(false);
+    }
+  };
+
   const handleDownloadOriginal = () => {
     api.get(`/documents/${documentId}/download-original`, {
       responseType: "blob",
@@ -303,6 +324,16 @@ export default function DocumentWorkspacePage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleTransformToIEEE}
+            disabled={isTransformingIEEE}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-700 via-indigo-600 to-blue-800 hover:from-blue-600 hover:to-indigo-500 text-white font-semibold text-xs shadow-md shadow-blue-700/20 disabled:opacity-50 transition-all border border-blue-500/30"
+            title="Auto-restructure and format this paper into standard IEEE conference/journal layout"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+            {isTransformingIEEE ? "Structuring..." : "Format as IEEE"}
+          </button>
+
           <button
             onClick={handleDownloadOriginal}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs border border-slate-300 shadow-sm transition-colors"

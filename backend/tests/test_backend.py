@@ -203,10 +203,12 @@ We formulate pulse synthesis via optimal control.
         assert "citation_issues" in val_data
         assert "structural_issues" in val_data
         assert isinstance(val_data["citation_issues"], list)
+
         # 17. Download original uploaded file
         orig_dl = await ac.get(f"/api/v1/documents/{doc_id}/download-original", headers=headers)
         assert orig_dl.status_code == 200
         assert b"Efficient Neural Architecture Search" in orig_dl.content
+
         # 18. Update User Profile & Preferences (Settings)
         profile_res = await ac.put("/api/v1/auth/profile", json={
             "full_name": "Dr. Test Senior Researcher",
@@ -225,6 +227,7 @@ We formulate pulse synthesis via optimal control.
         me_res = await ac.get("/api/v1/auth/me", headers=headers)
         assert me_res.status_code == 200
         assert me_res.json()["data"]["preferences"]["affiliation"] == "MIT CSAIL"
+
         # 19. Test Exporting CDM with Tables to PDF and DOCX
         cdm_data["tables"] = [{
             "id": "tab1",
@@ -249,5 +252,24 @@ We formulate pulse synthesis via optimal control.
         }, headers=headers)
         assert docx_tbl_res.status_code == 200
 
+        # 20. Universal IEEE Transformation and Export Test
+        ieee_tf_res = await ac.post(f"/api/v1/cdm/{doc_id}/transform/ieee", headers=headers)
+        assert ieee_tf_res.status_code == 200
+        ieee_cdm = ieee_tf_res.json()["data"]["cdm_data"]
+        sec_titles = [s["title"] for s in ieee_cdm["sections"]]
+        assert any("I." in t for t in sec_titles)
+        assert len(ieee_cdm["metadata"]["keywords"]) >= 3
+        assert len(ieee_cdm["metadata"]["authors"]) >= 1
 
-
+        # Generate IEEE LaTeX and verify IEEEtran elements
+        ieee_tex_res = await ac.post(f"/api/v1/generation/generate/{doc_id}", json={
+            "format": "LATEX",
+            "publisher_code": "IEEE"
+        }, headers=headers)
+        assert ieee_tex_res.status_code == 200
+        tex_export_id = ieee_tex_res.json()["data"]["id"]
+        tex_dl = await ac.get(f"/api/v1/exports/{tex_export_id}/download", headers=headers)
+        assert tex_dl.status_code == 200
+        assert rb"\documentclass[conference]{IEEEtran}" in tex_dl.content
+        assert rb"\IEEEauthorblockN" in tex_dl.content
+        assert rb"\begin{IEEEkeywords}" in tex_dl.content
